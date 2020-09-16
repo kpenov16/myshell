@@ -1,7 +1,8 @@
 #include<stdio.h>
 
 int main(int argc, char * args[]){
-
-    printf("Hello %s\n", "Bob");
+    char  *  names [] = {"Bob", "John"};
+    size_t size = sizeof(names)/sizeof(char *);
+    printf("char * names []  is of size: %zu\n", size);
 
 }
