@@ -19,6 +19,11 @@ int main(int argc, char * args[]){
     }else{
         printf("#########====child=====#########\n");
         printf("shared string in child is: %s\n", shared);
+
+        printf("Calling myecho with some version of exec\n");
+        char * params[] = {"./myecho","echoed string",NULL};
+        execvp(params[0], params);
+
         printf("Child is about to exit with 0\n");
         printf("#########====child=====#########\n");
         exit(0);
