@@ -5,6 +5,15 @@
 #include <unistd.h>
 #include <string.h>
 
+#include  <fcntl.h>                              
+#include  <stdio.h>                              
+#include  <stdlib.h>                             
+#include  <string.h>                             
+#include  <sys/types.h>                          
+#include  <sys/wait.h>                           
+#include  <sys/stat.h>                           
+#include  <termios.h>                            
+#include  <unistd.h> 
 
 
 char * input_string(FILE* fp, size_t size){
@@ -120,9 +129,50 @@ void run(){
         for(size_t i=0; i < count_commands; i++){            
             for (char ** ptr = in2[i]; *ptr != NULL; ptr++){
                 printf("%s\n", *ptr);
-                free(*ptr);
+                //execvp(in2[i+1][0], in2[i+1]);
+                //free(*ptr);
             }
         }
+
+        pid_t pid;
+        int fd[2];
+        pipe(fd);
+
+        pid = fork();
+        if(pid == 0){
+            printf("#########====pipe=writer=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[1], 1);
+            close(fd[1]);
+            close(fd[0]);
+            
+            execvp(in2[0][0], in2[0]);
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else{
+            pid = fork();
+            if(pid == 0){
+                printf("#########====pipe=reader=child=start=====#########\n");
+                // 0  stdin , 1 stdout, 2 err
+                dup2(fd[0], 0);
+                close(fd[0]);
+                close(fd[1]);
+
+                execvp(in2[1][0], in2[1]);
+
+                fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                exit(1);
+            }else{
+                int status;
+                close(fd[1]);
+                close(fd[0]);
+                waitpid(pid, &status, 0);
+            }
+        }
+
+
     }
 
     char delim[] = " ";
