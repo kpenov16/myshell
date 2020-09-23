@@ -6,17 +6,7 @@
 #include <string.h>
 
 
-size_t get_words_count(size_t lenght_str,char * input_str, char delim[]){
-    char * cp = (char *) malloc(lenght_str + 1); 
-    strcpy(cp, input_str);
-    size_t count_words = 0;
-    char *ptr1 = strtok(cp, delim);
-    for( ; ptr1 != NULL; count_words++){
-        ptr1 = strtok(NULL, delim);
-    }
-    free(cp);
-    return count_words;
-}
+
 char * input_string(FILE* fp, size_t size){
 //The size is extended by the input with the value of the provisional
     char *str;
@@ -36,6 +26,45 @@ char * input_string(FILE* fp, size_t size){
     return realloc(str, sizeof(char)*len);
 }
 
+size_t get_words_count(size_t lenght_str,char * input_str, char delim[]){
+    char * cp = (char *) malloc(lenght_str + 1); 
+    strcpy(cp, input_str);
+    size_t count_words = 0;
+    char *ptr1 = strtok(cp, delim);
+    for( ; ptr1 != NULL; count_words++){
+        ptr1 = strtok(NULL, delim);
+    }
+    free(cp);
+    return count_words;
+}
+
+
+char ** get_commands_arr(size_t count_words, char * input_str, char delim[]){
+    char * in = (char *) malloc(count_words); 
+    strcpy(in, input_str);
+    
+    //count_words++; //for the terminating NULL 
+    //there is '\n' in the end that we are going to override with NULL
+    char ** ar = malloc((count_words+1) * sizeof(char *));//ls -la NULL
+    int i = 0;
+    char *ptr = strtok(in, delim);
+    size_t c_words = 0;
+    for ( ; ptr != NULL; i++){
+        ar[i] = (char *) malloc(strlen(ptr) + 1);
+        strcpy(ar[i], ptr);            
+        ptr = strtok(NULL, delim);
+    }
+    //ar[i] = malloc(sizeof NULL);
+    //ar[i] = NULL;                //there is '\n' in the end that we are going to override with NULL
+
+    free(in);
+
+    return ar; 
+    //remember to free the ar's elementer out of this function 
+    //- maybe something like free(arr[0]); free(arr[1]); if ar length is 2 
+    //or free(arr) 
+}
+
 void run(){
     printf("# ");
     //start
@@ -46,13 +75,55 @@ void run(){
     char in[size+1];
     strcpy(in, in_tmp);
     in[size] = '\0';
-
+    /*
     char in2[size+1];
     strcpy(in2, in_tmp);
     in[size] = '\0';
-
+    */
     free(in_tmp); 
     //end
+
+    size_t count_commands = get_words_count(size, in, "|");
+    //printf("count_commands: %zu",count_commands);
+    char ** p_ar;
+    //char * in2[count_commands];
+    char ** in2[count_commands];
+    if(count_commands > 0){
+        p_ar = get_commands_arr( count_commands, in, "|" );        
+        for(size_t i = 0; i < count_commands; i++){
+            int size = strlen(p_ar[i]);
+            char delim[] = " ";
+            size_t count_words = get_words_count(size, p_ar[i], delim);
+
+            int ii = 0;
+            char *ptr = strtok(p_ar[i], delim);
+            size_t c_words = 0;
+            char ** ar = malloc(count_words * sizeof(char *));;//ls -la NULL
+            for ( ; ptr != NULL; ii++){
+                ar[ii] = (char *) malloc(strlen(ptr) + 1);
+                strcpy(ar[ii], ptr);            
+                ptr = strtok(NULL, delim);                
+            }
+            ar[ii] = malloc(sizeof NULL);
+            ar[ii] = NULL;                //there is '\n' in the end that we are going to override with NULL
+            printf("count_words %zu, i %d\n",count_words,ii);        
+            in2[i] = ar;
+
+            //printf("commands: %s", p_ar[i]);
+            free(p_ar[i]);
+        }
+        //free(p_ar);
+
+        // in2 ser sådan ud:
+        //  in2[0] = {"ls", "-la", NULL }; //hvor den string array ligger i heap men in2 pointers to arr liger i stack, måske :)
+        //  in2[1] = {"grep", "shel", NULL};
+        for(size_t i=0; i < count_commands; i++){            
+            for (char ** ptr = in2[i]; *ptr != NULL; ptr++){
+                printf("%s\n", *ptr);
+                free(*ptr);
+            }
+        }
+    }
 
     char delim[] = " ";
     size_t count_words = get_words_count(size, in, delim);
