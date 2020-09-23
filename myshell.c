@@ -5,7 +5,19 @@
 #include <unistd.h>
 #include <string.h>
 
-char *inputString(FILE* fp, size_t size){
+
+size_t get_words_count(size_t lenght_str,char * input_str, char delim[]){
+    char * cp = (char *) malloc(lenght_str + 1); 
+    strcpy(cp, input_str);
+    size_t count_words = 0;
+    char *ptr1 = strtok(cp, delim);
+    for( ; ptr1 != NULL; count_words++){
+        ptr1 = strtok(NULL, delim);
+    }
+    free(cp);
+    return count_words;
+}
+char * input_string(FILE* fp, size_t size){
 //The size is extended by the input with the value of the provisional
     char *str;
     int ch;
@@ -24,63 +36,148 @@ char *inputString(FILE* fp, size_t size){
     return realloc(str, sizeof(char)*len);
 }
 
-int main(int argc, char * args[]){
-        printf("# ");
-        char * in; //= getchar();
-        in = inputString(stdin,10);
-        int size = strlen(in);
-        char delim[] = " ";
-        
-        char * cp = (char *) malloc(size + 1); 
-        strcpy(cp, in);
-        size_t count_words = 0;
-        char *ptr1 = strtok(cp, delim);
-        for( ; ptr1 != NULL; count_words++){
-            ptr1 = strtok(NULL, delim);
+void run(){
+    printf("# ");
+    //start
+    char * in_tmp; 
+    in_tmp = input_string(stdin,10);
+    int size = strlen(in_tmp);    
+    
+    char in[size+1];
+    strcpy(in, in_tmp);
+    in[size] = '\0';
+
+    char in2[size+1];
+    strcpy(in2, in_tmp);
+    in[size] = '\0';
+
+    free(in_tmp); 
+    //end
+
+    char delim[] = " ";
+    size_t count_words = get_words_count(size, in, delim);
+    
+    size_t pipes = 0;
+    
+    //count_words++; //for the terminating NULL 
+    //there is '\n' in the end that we are going to override with NULL
+    char * ar[count_words];//ls -la NULL
+    int i = 0;
+    char *ptr = strtok(in, delim);
+    size_t c_words = 0;
+    for ( ; ptr != NULL; i++){
+        ar[i] = (char *) malloc(strlen(ptr) + 1);
+        strcpy(ar[i], ptr);            
+        ptr = strtok(NULL, delim);
+        if(ar[i][0] == '|'){
+            pipes++;
         }
-        
-        //count_words++; //for the terminating NULL 
-        //there is '\n' in the end that we are going to override with NULL
-        char * ar[count_words];//ls -la NULL
-        int i = 0;
-        char *ptr = strtok(in, delim);
-        for ( ; ptr != NULL; i++){
-            ar[i] = (char *) malloc(strlen(ptr) + 1);
-            strcpy(ar[i], ptr);            
-            ptr = strtok(NULL, delim);
+    }
+    ar[i] = malloc(sizeof NULL);
+    ar[i] = NULL;                //there is '\n' in the end that we are going to override with NULL
+    printf("count_words %zu, i %d\n",count_words,i);
+
+/*
+    //count_words++; //for the terminating NULL 
+    //there is '\n' in the end that we are going to override with NULL
+    char * ar2d[pipes+1][count_words];//ls -la NULL
+    int i = 0;
+    char *ptr = strtok(in2, delim);
+    size_t c_words = 0;
+    for ( ; ptr != NULL; i++){
+        ar2d[i][0] = (char *) malloc(strlen(ptr) + 1);
+        strcpy(ar2d[i][0], ptr);            
+        ptr = strtok(NULL, delim);
+        if(ar2d[i][0] == '|'){
+            pipes++;
         }
-        ar[i] = malloc(sizeof NULL);
-        ar[i] = NULL;                //there is '\n' in the end that we are going to override with NULL
-        printf("count_words %zu, i %d\n",count_words,i);
-        
+    }
+    ar2d[i][0] = malloc(sizeof NULL);
+    ar2d[i][0] = NULL;                //there is '\n' in the end that we are going to override with NULL
+    printf("count_words %zu, i %d\n",count_words,i);
+*/
 
 
-    int pid = fork();
-    if(pid != 0){
-        printf("#########====parent=start=====#########\n");
-        int r = waitpid(pid, NULL, 0);
-        //free
-        for(size_t i = 0; i < count_words; i++){
-            free(ar[i]);
-        }   
-        free(in); 
-        free(cp);
+    if(pipes > 0){
+        pid_t pid;
+        int fd[2];
+        pipe(fd);
+        pid = fork();
 
-        printf("waitpid returned: %d\n", r);
-        printf("#########====parent=end=====#########\n");
-        exit(0);
+        if(pid == 0){
+            printf("#########====pipe=writer=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[0], 1);
+            close(fd[0]);
+            close(fd[1]);
+
+            execvp(ar[0], ar);
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else{
+            pid = fork();
+            if(pid == 0){
+                printf("#########====pipe=reader=child=start=====#########\n");
+                // 0  stdin , 1 stdout, 2 err
+                dup2(fd[1], 0);
+                close(fd[0]);
+                close(fd[1]);
+
+                execvp(ar[0], ar);
+
+                fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                exit(1);
+            }else{
+                int status;
+                close(fd[0]);
+                close(fd[1]);
+                waitpid(pid, &status, 0);
+            }
+        }
+
     }else{
-        printf("#########====child=start=====#########\n");
-        for(size_t i = 0; i < count_words; i++){
-            printf("%s\n",ar[i]);
-        }
-        execvp(ar[0], ar);
-        //char * params[] = { "ls", "-la", NULL };
-        //execvp(params[0], params);
-        printf("#########====child=end=====#########\n");
-        exit(0);
-    }    
+        int pid = fork();
+    
+        if(pid == 0){ //in child
+            printf("#########====child=start=====#########\n");
+            /*for(size_t i = 0; i < count_words; i++){
+                printf("%s\n",ar[i]);
+            }*/
+            execvp(ar[0], ar);
+            printf("we should never see this!#########====child=end=====#########\n");
+            //char * params[] = { "ls", "-la", NULL };
+            //execvp(params[0], params);
+            exit(0);
+        }else{ //in parent
+            printf("#########====parent=start=====#########\n");
+            int r = waitpid(pid, NULL, 0);
+            //free
+            for(size_t i = 0; i < count_words; i++){
+                free(ar[i]);
+            }        
+            printf("waitpid returned: %d\n", r);
+            printf("#########====parent=end=====#########\n");
+
+            //run();
+
+            //exit(0);
+        }    
+
+    }
+
 }
+
+int main(int argc, char * args[]){
+    while (1)
+    {
+        run();
+    }    
+    exit(0);      
+}
+
+
 
 // refs:
 // https://www.geeksforgeeks.org/exec-family-of-functions-in-c/
@@ -93,4 +190,4 @@ int main(int argc, char * args[]){
 // https://www.tutorialspoint.com/what-does-dereferencing-a-pointer-mean-in-c-cplusplus 
 // https://stackoverflow.com/questions/21022644/how-to-get-the-real-and-total-length-of-char-char-array/21022695
 // https://www.tutorialspoint.com/cprogramming/c_input_output.htm
-// 
+// https://stackoverflow.com/questions/33884291/pipes-dup2-and-exec 
