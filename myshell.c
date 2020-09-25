@@ -16,6 +16,7 @@
 #include  <unistd.h> 
 
 
+
 char * input_string(FILE* fp, size_t size){
 //The size is extended by the input with the value of the provisional
     char *str;
@@ -74,6 +75,36 @@ char ** get_commands_arr(size_t count_words, char * input_str, char delim[]){
     //or free(arr) 
 }
 
+pid_t pid;
+int fd[2];
+
+void pipe_it(int key, size_t row, char ** in2[]){
+        if(key == 1){
+            printf("#########====pipe=writer=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[1], 1);
+            close(fd[1]);
+            close(fd[0]);
+            
+            execvp(in2[row][0], in2[row]);
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else if(key == 2){
+                printf("#########====pipe=reader=child=start=====#########\n");
+                // 0  stdin , 1 stdout, 2 err
+                dup2(fd[0], 0);
+                close(fd[0]);
+                close(fd[1]);
+
+                execvp(in2[row][0], in2[row]);
+
+                fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                exit(1);
+        }    
+}
+
 void run(){
     printf("# ");
     //start
@@ -97,6 +128,8 @@ void run(){
     char ** p_ar;
     //char * in2[count_commands];
     char ** in2[count_commands];
+
+
     if(count_commands > 0){
         p_ar = get_commands_arr( count_commands, in, "|" );        
         for(size_t i = 0; i < count_commands; i++){
@@ -133,7 +166,38 @@ void run(){
                 //free(*ptr);
             }
         }
+        
+                //start test
+        pipe(fd);
 
+        for(size_t i=0; i < count_commands; i++){            
+            if(i==0){
+                pid = fork();
+                if(pid==0){
+                    pipe_it(1, i, in2);
+                }else if(i==count_commands-1){
+                    int status;
+                    close(fd[1]);
+                    close(fd[0]);
+                    waitpid(pid, &status, 0);                    
+                }
+            }else if(i==1){
+                pid = fork();
+                if(pid==0){
+                    pipe_it(2, i, in2);
+                }else if(i==count_commands-1){
+                    int status;
+                    close(fd[1]);
+                    close(fd[0]);
+                    waitpid(pid, &status, 0);                    
+                }
+            }else{
+                printf("Should nerver be seen !!!\n");
+            }   
+        }
+                
+        
+  /*      
         pid_t pid;
         int fd[2];
         pipe(fd);
@@ -171,9 +235,14 @@ void run(){
                 waitpid(pid, &status, 0);
             }
         }
+*/
+//end test
 
 
     }
+
+
+
 
     char delim[] = " ";
     size_t count_words = get_words_count(size, in, delim);
@@ -291,9 +360,12 @@ void run(){
 }
 
 int main(int argc, char * args[]){
+
     while (1)
     {
         run();
+
+
     }    
     exit(0);      
 }
