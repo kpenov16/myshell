@@ -83,10 +83,71 @@ void pipe_it(int key, size_t row, char ** in2[]){
             printf("#########====pipe=writer=child=start=====#########\n");
             
             // 0  stdin , 1 stdout, 2 err
-            dup2(fd[1], 1);
+            dup2(fd[1], 1); //redirect stdout to the pipe's input end
             close(fd[1]);
             close(fd[0]);
             
+            execvp(in2[row][0], in2[row]); //the command will be read from stdin and the output 
+                                           // from the command will be writtent to fd[1] (we define this a the write end of the pipe)                                      
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else if(key == 3){
+            printf("#########====read=pipe=writ=pipe=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[0], 0);
+            close(fd[0]);
+
+            pipe(fd);            
+
+            dup2(fd[1], 1);
+            close(fd[1]);
+
+            execvp(in2[row][0], in2[row]);
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else if(key == 2){
+                printf("#########====pipe=reader=child=start=====#########\n");
+                // 0  stdin , 1 stdout, 2 err
+                dup2(fd[0], 0);
+                close(fd[0]);
+                close(fd[1]);
+
+                execvp(in2[row][0], in2[row]);
+
+                fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                exit(1);
+        }    
+}
+
+void pipe_it2(int key, size_t row, char ** in2[]){
+        if(key == 1){
+            printf("#########====pipe=writer=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[1], 1); //redirect stdout to the pipe's input end
+            close(fd[1]);
+            close(fd[0]);
+            
+            execvp(in2[row][0], in2[row]); //the command will be read from stdin and the output 
+                                           // from the command will be writtent to fd[1] (we define this a the write end of the pipe)                                      
+
+            fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+            exit(1);
+        }else if(key == 3){
+            printf("#########====read=pipe=writ=pipe=child=start=====#########\n");
+            
+            // 0  stdin , 1 stdout, 2 err
+            dup2(fd[0], 0);
+            close(fd[0]);
+
+            pipe(fd);            
+
+            dup2(fd[1], 1);
+            close(fd[1]);
+
             execvp(in2[row][0], in2[row]);
 
             fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
@@ -166,25 +227,77 @@ void run(){
                 //free(*ptr);
             }
         }
-        
-                //start test
-        pipe(fd);
 
-        for(size_t i=0; i < count_commands; i++){            
-            if(i==0){
-                pid = fork();
-                if(pid==0){
-                    pipe_it(1, i, in2);
-                }else if(i==count_commands-1){
-                    int status;
-                    close(fd[1]);
-                    close(fd[0]);
-                    waitpid(pid, &status, 0);                    
+
+                //start test
+        int fds[(count_commands-1)*2];
+        for( size_t i = 0; i < count_commands-1; i++ )
+            pipe(fds + i*2); 
+        
+
+        //pipe(fd);
+
+        for(size_t i=0, p=0; i < count_commands; i++, p+=2){            
+            pid = fork();
+            if(pid == 0){
+                if(i < count_commands-1){ //all other than last
+                  dup2(fds[p+1], 1);      //p1   p2   p3   p4
+                                          //0{1} 2{3} 4{5} 6[7]  
                 }
-            }else if(i==1){
-                pid = fork();
+
+                if(i != 0){             //all other than first
+                    dup2(fds[p-2], 0);  //p1   p2   p3   p4
+                                        //[0]1 {2}3 {4}5 {6}7
+                }
+
+                for(size_t i = 0; i < (count_commands-1)*2; i++ )
+                    close(fds[i]); //close all pipe ends
+
+                execvp(in2[i][0], in2[i]);
+            }else{
+                //parent forks the next pipe
+            }
+        }
+        //all pipes are chaneld 
+        for(size_t i = 0; i < (count_commands-1)*2; i++ )
+            close(fds[i]); //close all pipe ends
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        /*
+            if(i != 0){
                 if(pid==0){
-                    pipe_it(2, i, in2);
+                    printf("#########====pipe=writer=child=start=====#########\n");
+                    // 0  stdin , 1 stdout, 2 err
+                    dup2(fds[1], 1); //redirect stdout to the pipe's input end
+                    //close(fd[1]);
+                    //close(fd[0]);
+            
+                    execvp(in2[i][0], in2[i]); //the command will be read from stdin and the output 
+                                           // from the command will be writtent to fd[1] (we define this a the write end of the pipe)                                      
+
+                    fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                    exit(1);
+
+                    //pipe_it(1, i, in2);
+                }
+            }
+            if(i==count_commands-1){
+                
+                if(pid==0){
+                    printf("#########====pipe=reader=child=start=====#########\n");
+                    // 0  stdin , 1 stdout, 2 err
+                    dup2(fd[0], 0);
+                    close(fd[0]);
+                    close(fd[1]);
+
+                    execvp(in2[i][0], in2[i]);
+
+                    fprintf(stderr, "Failed to execute '%s'\n", "firstcmd");
+                    exit(1);
+                
+                    //pipe_it(2, i, in2);
                 }else if(i==count_commands-1){
                     int status;
                     close(fd[1]);
@@ -196,7 +309,8 @@ void run(){
             }   
         }
                 
-        
+        */
+
   /*      
         pid_t pid;
         int fd[2];
@@ -384,3 +498,4 @@ int main(int argc, char * args[]){
 // https://stackoverflow.com/questions/21022644/how-to-get-the-real-and-total-length-of-char-char-array/21022695
 // https://www.tutorialspoint.com/cprogramming/c_input_output.htm
 // https://stackoverflow.com/questions/33884291/pipes-dup2-and-exec 
+// https://stackoverflow.com/questions/8389033/implementation-of-multiple-pipes-in-c
