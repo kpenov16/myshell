@@ -1,114 +1,58 @@
+#include "myshell_helpers.h"
+
 #include <stdio.h>
 #include <sys/wait.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <string.h>
-
-//we dont know how big is the input and therefore we need a function that can take 
-//variable lenght input 
-char * input_string(FILE* fp, size_t size){ // https://stackoverflow.com/questions/16870485/how-can-i-read-an-input-string-of-unknown-length
-//The size is extended by the input with the value of the provisional
-    char *str;
-    int ch;
-    size_t len = 0;
-    str = realloc(NULL, sizeof(char)*size);//size is start size for the newly created block of memory
-    if(!str)return str; //in case size is 0, NULL will be dealocated something like free(NULL) strange :)
-    while(EOF!=(ch=fgetc(fp)) && ch != '\n'){ //we read char by char and exit on new line or EOF
-        str[len++]=ch; //add current char to char array and count up
-        if(len==size){ //when current available space is reached - we need more space 
-            str = realloc(str, sizeof(char)*(size+=16)); //we extend the str size with 16 bytes every time we need more space
-            if(!str)return str; 
-        }
-    }
-    str[len++]='\0'; //add end of string char at the end of the input and increase with 1
-    return realloc(str, sizeof(char)*len); //add an extra byte from len at the end
-}
-
-//counts the number of strings separated by the delimiter whitout modifying the input str 
-size_t get_words_count(size_t lenght_str,char * input_str, char delim[]){
-    char * input_tmp = (char *) malloc(lenght_str + 1); 
-    strcpy(input_tmp, input_str);
-    size_t count_words = 0;
-    char *ptr1 = strtok(input_tmp, delim);
-    for( ; ptr1 != NULL; count_words++){
-        ptr1 = strtok(NULL, delim);
-    }
-    free(input_tmp);
-    return count_words;
-}
-
-//this is a general function for tokonization and has no side effects on the input, 
-//returns pointer to the tokenized string f.eks.: "This is tokenized" -> {"This", "is", "tokenized"} 
-                                            // or "ls -la | grep shell" -> {"ls -la ", "grep shell"}
-char ** get_commands_arr(size_t count_words, char * input_str, char delim[]){
-    char * in_tmp = (char *) malloc(count_words); //we don't want to set NULL in the original string when we tokenize
-    strcpy(in_tmp, input_str);                    //so we make a temp copy of it that we free from heap after that 
-    
-    //there is '\n' in the end that we are going to override with NULL
-    char ** ar = malloc((count_words+1) * sizeof(char *));//ls -la NULL //there is + 1 for the additional NULL element in the end
-    int i = 0;
-    char *ptr = strtok(in_tmp, delim);  //start tokonization for the given delimiter " " or "|" in our case
-    size_t c_words = 0;
-    for ( ; ptr != NULL; i++){
-        ar[i] = (char *) malloc(strlen(ptr) + 1); //alocate space for the string on heap
-        strcpy(ar[i], ptr);                       //copy string to the alocated space
-        ptr = strtok(NULL, delim);
-    }
-    //ar[i] = malloc(sizeof NULL); //**I keep this here to remind me of something :)
-    //ar[i] = NULL;                //there is '\n' in the end that we are going to override with NULL
-    free(in_tmp);
-    return ar; 
-    //remember to free the ar's elementer out of this function 
-    //- maybe something like free(arr[0]); free(arr[1]); if ar length is 2 
-    //or free(arr) 
-}
+#include <stdlib.h>
 
 void run(){
-    printf("# ");
+    printf("myshell# ");
     
-    char * in_tmp; 
-    in_tmp = input_string(stdin,10); //get pointer to user input 
-    int size = strlen(in_tmp);       
+    char * input_str_tmp = get_input_string(stdin,10); //get pointer to user input 
+    int    size   = strlen(input_str_tmp);       
     
-    char in[size+1];
-    strcpy(in, in_tmp);  //copy str from heap into local var on the stack            
-    in[size] = '\0';     //add end of string char in any case ..
-    free(in_tmp);        //free the heap alocated space from the original input
+    char input_str[size+1];
+    strcpy(input_str, input_str_tmp);  //copy str from heap into local var on the stack            
+    input_str[size] = '\0';     //add end of string char in any case ..
+    free(input_str_tmp);        //free the heap alocated space from the original input
    
 
-    size_t count_commands = get_words_count(size, in, "|");  //if pipe in the input we need the number of commands
-    char ** in2[count_commands];  //create array to hold pointers to each command, each command will be array of strings with null element in the end
+    size_t count_commands = get_words_count(size, input_str, "|");  //if pipe in the input we need the number of commands
+    char ** commands_arr[count_commands];  //create array to hold pointers to each command, each command will be array of strings with null element in the end
 
-    char ** ar_tmp; // we are going to tokenize each command on a " " now but we don't need the originals - we call them tmp 
-    ar_tmp = get_commands_arr( count_commands, in, "|" );        
+    char ** commands_arr_tmp; // we are going to tokenize each command on a " " now but we don't need the originals - we call them tmp 
+    commands_arr_tmp = get_commands_arr( count_commands, input_str, "|" );        
     for(size_t i = 0; i < count_commands; i++){ //for each command in the array we prepare 2d array - one row per command
-        int size = strlen(ar_tmp[i]); //how may chars a command has
+        int size = strlen(commands_arr_tmp[i]); //how may chars a command has
         char delim[] = " ";
-        size_t count_words = get_words_count(size, ar_tmp[i], delim); //how many words are there in a command
-
+        
+        size_t count_words = get_words_count(size, commands_arr_tmp[i], delim); //how many words are there in a command
         //tokenize the command strings and populate the 2d array so that can be used for the pipes
-        int ii = 0;
-        char *ptr = strtok(ar_tmp[i], delim);
-        size_t c_words = 0;
-        char ** ar = malloc(count_words * sizeof(char *));;//ls -la NULL //we need a pointer for each element of each command
-        for ( ; ptr != NULL; ii++){
-            ar[ii] = (char *) malloc(strlen(ptr) + 1); //alocate space for the element
-            strcpy(ar[ii], ptr);    //copy the element in the next position of the array            
+        int j = 0;
+        char *ptr = strtok(commands_arr_tmp[i], delim);
+        //size_t c_words = 0;
+        char ** command_parmas_arr = malloc(count_words * sizeof(char *));;//ls -la NULL //we need a pointer for each element of each command
+        for ( ; ptr != NULL; j++){
+            command_parmas_arr[j] = (char *) malloc(strlen(ptr) + 1); //alocate space for the element
+            strcpy(command_parmas_arr[j], ptr);    //copy the element in the next position of the array            
             ptr = strtok(NULL, delim);                
         }
-        ar[ii] = malloc(sizeof NULL);
-        ar[ii] = NULL;                //there is '\n' in the end that we are going to override with NULL
-                                      //arr[ii] looks like this {"ls", "-la", NULL}
-        in2[i] = ar;                  //in2  looks like this in2[0] = {"ls", "-la", NULL} in2[0] = {"grep", "shell", NULL} ..
-        free(ar_tmp[i]); //free the heap of the temp array
+        command_parmas_arr[j] = malloc(sizeof NULL);
+        command_parmas_arr[j] = NULL; //if there is '\n' in the end that we are going to override with NULL
+                                      //command_parmas_arr looks like this command_parmas_arr[0] = "ls", command_parmas_arr[1] = "-la" ..
+                
+        commands_arr[i] = command_parmas_arr;  //commands_arr  looks like this commands_arr[0] = {"ls", "-la", NULL} piped_commands_arr[1] = {"grep", "shell", NULL} ..
+        free(commands_arr_tmp[i]); //free the heap of the temp array it is NULL tokenized and we cant use it
     }
 
-    // in2 ser sådan ud:
-    //  in2[0] = {"ls", "-la", NULL }; //hvor den string array ligger i heap men in2 pointers to arr liger i stack, måske :)
-    //  in2[1] = {"grep", "shel", NULL};
+    //  commands_arr ser sådan ud:
+    //  commands_arr[0] = {"ls", "-la", NULL }; //hvor den string array ligger i heap men commands_arr pointers to arr liger i stack, måske :)
+    //  commands_arr[1] = {"grep", "shel", NULL};
     for(size_t i=0; i < count_commands; i++){            
-        for (char ** ptr = in2[i]; *ptr != NULL; ptr++){
+        for (char ** ptr = commands_arr[i]; *ptr != NULL; ptr++){
             //printf("%s\n", *ptr);                
         }
     }
@@ -150,23 +94,23 @@ void run(){
                                //after dup2 and before closing them we have two fd pointing to the same end of the pipe
                                //we don't want to write/read by chance in the code so we close them in that way only 
                                //the exec* can reach the pipes reading or writing to stdin or stdout thinking its the standard 
-            execvp(in2[i][0], in2[i]);
+            execvp(commands_arr[i][0], commands_arr[i]);
         }else{
             //parent forks the next pipe
         }
     }
-    //all pipes are chaneld 
+    //all pipes are channeld 
     for(size_t i = 0; i < (count_commands-1)*2; i++ )
         close(fds[i]); //close all pipe ends - this is the parent, all the children had their "copies" of the fds becouse of the parent 
                        //we have closed them in the children, remember, and now we do it in the parent
     int status;
     waitpid(pid, &status, 0); //wait for the last child to finish work
 
-    for(size_t i=0; i < count_commands; i++)            
-        for (char ** ptr = in2[i]; *ptr != NULL; ptr++)
+    for(size_t i=0; i < count_commands; i++){            
+        for (char ** ptr = commands_arr[i]; *ptr != NULL; ptr++){
             free(*ptr); //free all the additional heap created
-    for(size_t i=0; i < count_commands; i++)            
-        free(in2[i]); //free all the additional heap created                
+        }
+    }                               
 }
 
 int main(int argc, char * args[]){
@@ -188,3 +132,4 @@ int main(int argc, char * args[]){
 // https://www.tutorialspoint.com/cprogramming/c_input_output.htm
 // https://stackoverflow.com/questions/33884291/pipes-dup2-and-exec 
 // https://stackoverflow.com/questions/8389033/implementation-of-multiple-pipes-in-c
+// https://riptutorial.com/c/example/3250/calling-a-function-from-another-c-file
